@@ -1,0 +1,586 @@
+---
+title: "STAT 1261/2260 Final Project"
+author: "Liam Beresteanu, Liam Goodwin, Kiana Kazemi, Shibendu Mandal"
+date: "`r Sys.Date()`"
+output: word_document
+   #reference_docx: "ReportTemplate_STAT1261.docx"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Abstract
+  The global macroeconomic system is the result of complex interactions between endogenous financial, social, and technological variables. In our research, we sought to draw an outline for predicting one of those variables: trade. Specifically, we looked at how variables ranging from Gini index value, GNI per capita, inflation, proportion of women in parliament, and foreign direct investment could be used to predict trade as a proportion of GDP in a set of representative countries: China, the United States, Kenya, and Norway. To address the autocorrelated nature of our time series data, we constructed and optimized both linear and polynomial regression models using differenced data points, that is values representing the change in a variable from one period to the next. Through an analysis of mean squared error on a test set of data points, we found that our linear model had the best predictive capacity. Notably, among the limited variables included in the model, changes in GNI, the proportion of women in parliament, and changes in inflation were the strongest predictors of changes in trade. While these results are not generalizable and only involve a limited set of explanatory variables, they highlight some key relationships underlying trade and lay a structural groundwork for future empirical research on global macroeconomic variables.
+
+
+***
+
+# Introduction
+In this project, we set out with the intention of familiarizing ourselves with macroeconomic data and determining meaningful relationships between macroeconomic variables. Specifically, we wanted to analyze variables which we consider the most relevant to the well being of individuals. We ended up focusing on GNI per capita, inflation, total trade, gender equality, and wealth equality. 
+
+Of course, we recognize that macroeconomic systems and economic relationships vary across countries. To account for this, we structured our project as a representative case study. Specifically, we focused our analysis around four distinct countries from different regions of the world; China, Kenya, Norway, and the United States. 
+
+## Statement of Purpose
+The purpose of this paper is to explore the relationships between key macroeconomic and social variables in representative countries - China, Kenya, Norway, and the United States.
+
+## Research Question
+Which social and economic variables are the the most important predictors of the centrality of trade in an economy?
+
+***
+
+# Methodology
+
+## Data Set
+
+The data set originated from the World Bank Group's Open Data, pulling in 8 variables, seen below.
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+
+CountryData <- read_csv("CleanedCountryData.csv")
+
+CountryData= CountryData %>% rename(
+  'GNI' = 'GNI per capita growth (annual %)',
+  'Inflation'= 'Inflation, consumer prices (annual %)',
+  'PropW'= 'Proportion of seats held by women in national parliaments (%)',
+  'Gini'= 'Gini index',
+  'FDI'= 'Foreign direct investment, net inflows (% of GDP)',
+  'Energy'= 'Public private partnerships investment in energy (current US$)',
+  'Imports'= 'Imports of goods and services (% of GDP)',
+  'Exports'= 'Exports of goods and services (% of GDP)') %>% 
+  mutate(TotalTrade = Imports + Exports) %>% 
+
+dplyr::select(Year:Country, TotalTrade, GNI:Inflation, FDI:Gini)
+ViewData=CountryData %>% filter((Year== 1960)|(Year==2022)) 
+
+ViewData
+```
+
+
+## Variables
+
+| Short Variable Name | Original Variable Name |
+| ------ | --------- |
+| GNI | GNI per capita growth (annual %) |
+| Inflation | Inflation, consumer prices (annual %) |
+| PropW | Proportion of seats held by women in national parliaments (%) |
+| Gini | Gini index |
+| FDI | Foreign direct investment, net inflows (% of GDP)|
+| Energy | Public private partnerships investment in energy (current US$)|
+| Imports | Imports of goods and services (% of GDP) |
+| Exports | Exports of goods and services (% of GDP) |
+| TotalTrade | Imports + Exports (% of GDP) |
+
+### Explanation of Variables
+
+#### GNI
+GNI per capita growth (annual %) is an indicator of the percentage change in the gross national income (GNI) per capita over a year. It is calculated by dividing the difference between the GNI per capita of two years by the GNI per capita of the earlier year, and multiplying the result by 100. GNI per capita is a measure of the average income a person has at their disposal. A higher GNI per capita is often associated with higher rates of literacy and access to hygienic and pure water for the population. Overall, GNI per capita growth provides insight into the changing standard of living for the average person in a given country over the years.
+
+#### Gini
+The Gini Index is a measure of statistical dispersion that captures the relative amount of wealth disparity in a particular country. The values range from 0 to 100, with 0 indicating perfect equality and 100 indicating absolute inequality. The summary tables below show important descriptive statistics regarding the Gini index in China, Kenya, Norway, and the United States respectively. 
+
+#### Proportion of Women in Parliament
+The Proportion of Women in Parliament is simply the percentage of seats held by women in single or lower pariliament chambers.
+
+#### Inflation
+Inflation occurs when prices of goods and services increase over a large period of time, thus causing purchasing power to decrease. This means that a country's currency would not be able to buy as much today as it would be able to in the past.
+
+#### Foreign direct investment - **Excluded from Data Exploration**
+Foreign direct investment (FDI) represents a specific category of investment into a country's businesses/enterprises made by individuals, companies or governments from other countries. The specific metric we are utilizing expresses the net amount (Inflows-Outflows) of FDI as a percentage of a country’s Gross Domestic Product. This metric serves as an indicator in a country’s economic openness and also a dependence on foreign investment to drive growth instead of trade, the variable of interest. 
+
+*Note*:  Our group decided to not do data exploration on FDI as economic intuition indicates weak correlation with total trade (Exports + Imports). We still will implement FDI into our machine models to corroborate with the studies. 
+
+#### Public private partnerships investment in energy - **Excluded from Data Exploration**
+Public Private Partnerships (PPP) specifically in the energy sector represents the collaborations between public and private entities to help finance, develop, and finally manage energy base projects. These projects can encompass developing green energy projects, or establishing a robust energy infrastructure to mitigate blackouts. Additionally, there may be stipulations in place such as using domestic manufacturing for materials. The particular metric included in our dataset measures the total PPP investment in energy in terms of current United States Dollar value.
+
+*Note*: We decided to not include this variable in our modeling process as it is a very limited dataset. With Norway and the United States having a total of 3 observations, this would shrink our test and training data set significantly and under-represent these countries. Not to mention the high probable chance of having models overfit the training data significantly. 
+
+## Modeling and Analysis Plan
+
+  The goal of our analysis is to find the strongest macroeconomic/social predictor(s) for total trade in the world economy. To do this, we will first begin by reviewing our selected predictors in an exploratory environment, using time series charts and graphing in comparison to total trade. This will help by giving us an initial insight into what variables may end up influencing total trade in the greatest extent. 
+  Next, we plan to execute a further analysis of the relationship between these predictors and total trade through more advanced machine learning models--particularly linear and polynomial regressions. They can help us establish a more grounded conclusion on our predictors and relationships. While the conclusion may not be completely distinct, it will provide stronger evidence to what may be most influential towards total trade in a nation.
+  Overall, this comprehensive analysis plan serves as the guide for extracting meaningful information into the relationships regarding trade and lays the groundwork for our interpretations and conclusions in the research paper.
+
+***
+
+# Results
+
+## Exploratory Data Analysis
+
+### Variables by Country over Time
+
+#### Gini Index Value
+```{r,warning=FALSE, message=FALSE}
+#Plotting the Gini Index
+YearvGini= CountryData %>% filter(!is.na(Year) & !is.na(Gini))
+ggplot(data = CountryData, mapping = aes(x = Year,y = Gini)) + geom_point()+geom_smooth(se=FALSE, aes(color=Country))+
+facet_wrap(~Country)+ labs(x= 'Year',y= 'Gini Index Value', title='Year vs Gini Index', subtitle= 'How has Wealth Disparity Changed Over Time?' )
+```
+
+#### GNI
+```{r,warning=FALSE, message=FALSE}
+YearvGNI= CountryData %>% filter(!is.na(Year) & !is.na(GNI))
+ggplot(data = CountryData, mapping = aes(x = Year,y = GNI)) + geom_point()+geom_smooth(se=FALSE, aes(color=Country))+
+facet_wrap(~Country)+ labs(x= 'Year',y= 'GNI per capita growth (annual %)', title='Year vs GNI', subtitle= 'How has Income Changed Over Time?' )
+```
+
+#### Proportion of Women in National Parliaments
+```{r,warning=FALSE, message=FALSE}
+YearvWomen= CountryData %>% filter(!is.na(Year) & !is.na(PropW))
+ggplot(data = CountryData, mapping = aes(x = Year,y = PropW)) + geom_point()+geom_smooth(se=FALSE, aes(color=Country))+
+facet_wrap(~Country)+ labs(x= 'Year',y= 'Proportion of Women in National Parliaments', title='Year vs Women in Parliament', subtitle= 'How has Gender Equality Changed Over Time?' )
+```
+
+#### Inflation
+```{r,warning=FALSE, message=FALSE}
+YearvInflation= CountryData %>% filter(!is.na(Year) & !is.na(Inflation))
+ggplot(data = CountryData, mapping = aes(x = Year,y = Inflation)) + geom_point()+geom_smooth(se=FALSE, aes(color=Country))+
+facet_wrap(~Country)+ labs(x= 'Year',y= 'Inflation (annual %)', title='Year vs Inflation Rate', subtitle= 'How has Inflation Changed Over Time?')
+```
+
+#### Total Trade (Imports + Exports)
+```{r,warning=FALSE, message=FALSE}
+YearvTotalTrade= CountryData %>% filter(!is.na(Year) & !is.na(TotalTrade))
+ggplot(data = CountryData, mapping = aes(x = Year,y = TotalTrade)) + geom_point()+geom_smooth(se=FALSE, aes(color=Country))+
+facet_wrap(~Country)+ labs(x= 'Year',y= 'Total Trade of Goods and Services (% GDP)', title='Year vs Trade', subtitle= 'How has Trade Changed Over Time?')
+```
+
+### Relationships
+```{r, warning=FALSE, message=FALSE}
+NorwayData <- CountryData %>% 
+  filter(Country == "Norway") 
+ChinaData <- CountryData %>% 
+  filter(Country == "China")
+KenyaData <- CountryData %>% 
+  filter(Country == "Kenya")
+USAData <- CountryData %>% 
+  filter(Country == "United States")
+
+CountryData <- CountryData %>% 
+  add_column('TradeGrowth'=c(NA,diff(ChinaData$TotalTrade),NA,diff(KenyaData$TotalTrade),
+                              NA,diff(NorwayData$TotalTrade),NA,diff(USAData$TotalTrade)))
+
+```
+
+#### GNI
+To analyze GNI, we had to include a new variable, TradeGrowth. Since the GNI is depicted as % change annually, we want the response variable also to depict change over TotalTrade by finding change over the year.
+
+##### Summary Statistics
+```{r, warning=FALSE, message=FALSE}
+GNISummary <- CountryData %>% 
+  group_by(Country) %>% 
+  summarise(
+    Min_GNI = min(GNI, na.rm = TRUE),
+    Max_GNI = max(GNI, na.rm = TRUE),
+    Mean_GNI = mean(GNI, na.rm = TRUE),
+    Median_GNI = median(GNI, na.rm = TRUE),
+    StdDev_GNI = sd(GNI, na.rm = TRUE)
+  )
+# Show the summary statistics
+print(GNISummary)
+```
+
+##### Further Analysis
+
+  When examining the time series graph alongside Gross National Income (GNI), it becomes evident that there is no discernible and consistent pattern in the GNI's evolution across the countries we surveyed. This raises inquiries regarding the factors responsible for, or at least capable of forecasting, shifts in wealth inequality. The graph below delves into the role of trade as a potential predictor for GNI.
+
+```{r data_exploration, warning=FALSE, message=FALSE}
+GNI_Compare <- ggplot(CountryData, aes(x = GNI, y = TradeGrowth, color = Country)) + 
+  geom_smooth(se = TRUE, method = 'lm') + geom_point(aes(shape=Country),color="black",size=0.75) + 
+  labs(x= 'GNI per Capita Growth (annual %)',y= 'Total Trade Growth (annual %)',
+       title='GNI vs Total Trade Growth', subtitle= 'Can you predict Change in Total Trade from GNI?' )
+GNI_Compare
+```
+
+  The graph displayed above highlights a distinct positive correlation between trade and GNI in China, Kenya, and the United States. It also indicates a somewhat weaker positive association in Norway, where the trend line remains relatively flat. These findings justify the need for additional investigation into the predictive role of trade in Gross National Income.
+
+
+#### Gini Index: Trade and Wealth Disparities
+
+##### Summary Statistics
+```{r, warning=FALSE, message=FALSE}
+GiniSummary <- CountryData %>% 
+  group_by(Country) %>% 
+  summarise(
+    Min_Gini = min(Gini, na.rm = TRUE),
+    Max_Gini = max(Gini, na.rm = TRUE),
+    Mean_Gini = mean(Gini, na.rm = TRUE),
+    Median_Gini = median(Gini, na.rm = TRUE),
+    StdDev_Gini = sd(Gini, na.rm = TRUE)
+  )
+
+# Show the summary statistics
+print(GiniSummary)
+```
+
+##### Further Analysis
+
+  As the above graphs reveal, there does not appear to be a consistent trend in how the Gini index changes over time among our survey of countries. This brings the question of what factors cause, or at least predict, changes in wealth inequality. The below graph explores Gini index as a potential predictor for Total Trade. 
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(data = CountryData, mapping = aes(x = Gini,y = TotalTrade)) + geom_point(aes(shape=Country)) + geom_smooth(se=TRUE, method=lm, aes(color=Country))+ labs(x= 'Gini Index Value',y= 'Total Trade (%GDP)', title='Trade vs Gini Index', subtitle= 'The Relationship Between Trade and Wealth Disparity' ) 
+```
+
+  The above graph points at a clear positive relationship between trade and inequality in China, the United States, and Kenya as well as a very weak positive relationship between the variables in Norway. These results warrant further exploration of inequality as a predictor of trade.
+
+
+#### Women in Government
+
+  As governments continue to grow, we find that the proportion of women in government can be an interesting factor towards government policies, development, and foreign relations. As such, it can be hypothesized that there is potentially a relationship between the proportion of women in government and trade. As seen below, we find that Norway has had the highest proportion of women in government, while Kenya has has the least.
+
+##### Summary Statistics
+```{r, warning=FALSE, message=FALSE}
+PropWSummary <- CountryData %>% 
+  group_by(Country) %>% 
+  summarise(
+    Min_PropW = min(PropW, na.rm = TRUE),
+    Max_PropW = max(PropW, na.rm = TRUE),
+    Mean_PropW = mean(PropW, na.rm = TRUE),
+    Median_PropW = median(PropW, na.rm = TRUE),
+    StdDev_PropW = sd(PropW, na.rm = TRUE)
+  )
+
+# Show the summary statistics
+print(PropWSummary)
+```
+
+
+##### Further Analysis
+
+  We find that China, Kenya, and the United States are most similar to each other in terms of their median proportion of women in government. Norway appears to be a distinct outlier, having the highest minimum, maximum, mean, and median. To get further insight on how this can related to the openness of a country, below is a chart with a simple comparison of total trade and the proportion of seats held by women in national parliaments. 
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(data = CountryData, mapping = aes(x = PropW,y = TotalTrade)) + geom_point(aes(shape=Country)) + geom_smooth(se=TRUE, method=lm, aes(color=Country))+ labs(x= 'Proportion of seats held by women in national parliaments (%)',y= 'Total Trade (%GDP)', title='Trade vs Proprtion of Women in Government', subtitle= 'The Relationship Between Trade and Women in Government' ) 
+```
+
+
+  Reflecting on this graph, it is not intrinsically clear that there is any direct relationship between the the proportion of women in a government, and the total trade of the nation. However, we find for countries such as China and Kenya, a lower proportion is related to greater total trade. In contrast, the US and Norway display positive relationships -- as the proportion of women increases, so does total trade. This can lead to further discussion on how the make up of national parliaments can have implication for a nation's trade.
+
+#### Inflation
+
+  Below we provided some summary statistics for the four counties that we selected. The Min_Inflation shows the year with the least inflation, if this value is negative then there was deflation (purchasing power increases) in that specific country. Max_Inflation shows the year with the highest inflation. The Mean_Inflation and Median_Inflation are different measures for the average and middle years of inflation per country. Lastly the Std_Dev_Inflation is a measure of dispersion between the different values of inflation over all the years. 
+
+##### Summary Statistics
+```{r, warning=FALSE, message=FALSE}
+InflationSummary <- CountryData %>% 
+  group_by(Country) %>% 
+  summarise(
+    Min_Inflation = min(Inflation, na.rm = TRUE),
+    Max_Inflation = max(Inflation, na.rm = TRUE),
+    Mean_Inflation = mean(Inflation, na.rm = TRUE),
+    Median_Inflation = median(Inflation, na.rm = TRUE),
+    StdDev_Inflation = sd(Inflation, na.rm = TRUE)
+  )
+
+# Show the summary statistics
+print(InflationSummary)
+```
+
+##### Further Analysis
+```{r, warning=FALSE, message=FALSE}
+ggplot(data = CountryData, mapping = aes(x = TotalTrade,y = Inflation)) + geom_point(aes(shape=Country)) + geom_smooth(se=TRUE, method=lm, aes(color=Country))+ labs(x= 'Inflation, consumer prices (annual %)',y= 'Total Trade (%GDP)', title='Trade vs Inflation', subtitle= 'The Relationship Between Trade and Inflation in Consumer Prices' ) 
+```
+
+  In this graph, we can see the relationship between total trade and inflation for each country. Each country has a semi-clear relationship, yet due to relative differences between countries, there may be indication that inflation may not be the clearest predictor for trade.
+
+### Exploration Conclusions
+  The exploration of our selected macroeconomic variables in comparison to total trade yielded mixed results. The weakest relationships were seen between with inflation and GNI in comparison to total trade. We found more a more convincing relationship between Gini index and trade. However, the strongest relationship was found in the proportion of women in parliament (PropW) and total trade.
+  Thus, through implementing machine learning models, we planned to explore the relationship between trade and the predictors further in detail. Doing so would allow us to grasp a better understanding of the strength of relationships between these key socioeconomic variables and total trade. 
+
+## Modeling
+
+  Time series data is a unique data type due to its inherent dependence on time to gather observations. This dependence is often referred to as autocorrelation and  can hinder results severely when applying the data to a traditional machine learning model such as linear regression. Some of the reason, include -
+
+1. *Overfitting due to multicollinearity*: Correlated variables tend to provide redundant information making analyses harder to highlight and interpret variables affecting the response
+2. *Model instability*: The connecting nature of variables can make them very sensitive to changes in the model resulting in huge fluctuations
+3. *Violation of Independence Assumption*: The big assumption most models make, including linear regression, is that the data points are independent. Autocorrelation inherently breaks this assumption, leading to biased estimates.
+
+  To make sure our data lacked autocorrelation we decided to assess it by using the checkresiduals() function from the forecast library. It not only provides a visual inspection of the residuals, which could reveal patterns suggesting autocorrelation, but also provides a formal statistical test called the Ljung-Box test. In the hypothesis test, the null hypothesis is when the data is not correlated while the alternative hypothesis claims the data to be correlated. 
+  When we ran it for Gini we noted the outliers in the residuals and a very small p-value, which allowed us to reject the null hypothesis of the Ljung-Box test. Recognizing the presence of correlation in our data, we opted to apply differentiation - an established technique in mitigating autocorrelation. 
+
+```{r}
+library(forecast)
+
+modelData <- CountryData %>% na.omit()
+checkresiduals(modelData$Gini)
+```
+
+  After dropping observations with missing data, we stratified the data by country. In each country, we added a dummy variable n to order the observations, then differenced the observations for each variable. Following that, we used rbind() to bring the data back together and again removed the new observations with missing data, leaving the differenced dataset in CountryDataDiff. We then removed the irrelevant variables.
+	By differencing the dataset, we removed time from the data in order to address the issue of auto-correlation. Now, our observations represent changes in variables that we can use to predict a change in total trade, now represented as TTDiff.
+
+
+```{r}
+library(broom)
+library(modelr)
+
+CountryData=CountryData %>% drop_na()
+glimpse(CountryData)
+
+NorwayData <- CountryData %>% 
+  filter(Country == "Norway")
+NorwayData$n= seq(1,18,1)
+NorwayData=NorwayData %>% mutate(GiniDiff = NorwayData$Gini[n+1]-NorwayData$Gini[n])%>% mutate(InfDiff = NorwayData$Inflation[n+1]-NorwayData$Inflation[n])%>% mutate(GNIDiff = NorwayData$GNI[n+1]-NorwayData$GNI[n])%>% mutate(PropWDiff = NorwayData$PropW[n+1]-NorwayData$PropW[n])%>% mutate(TTDiff = NorwayData$TotalTrade[n+1]-NorwayData$TotalTrade[n]) %>% mutate(FDIDiff = NorwayData$FDI[n+1]-NorwayData$FDI[n]) 
+NorwayData
+
+ChinaData <- CountryData %>% 
+  filter(Country == "China")
+ChinaData$n= seq(1,15,1)
+ChinaData=ChinaData %>% mutate(GiniDiff = ChinaData$Gini[n+1]-ChinaData$Gini[n])%>% mutate(InfDiff = ChinaData$Inflation[n+1]-ChinaData$Inflation[n])%>% mutate(GNIDiff = ChinaData$GNI[n+1]-ChinaData$GNI[n])%>% mutate(PropWDiff = ChinaData$PropW[n+1]-ChinaData$PropW[n])%>% mutate(TTDiff = ChinaData$TotalTrade[n+1]-ChinaData$TotalTrade[n]) %>% mutate(FDIDiff = ChinaData$FDI[n+1]-ChinaData$FDI[n])
+ChinaData
+
+KenyaData <- CountryData %>% 
+  filter(Country == "Kenya")
+KenyaData$n= seq(1,5,1)
+KenyaData=KenyaData %>% mutate(GiniDiff = KenyaData$Gini[n+1]-KenyaData$Gini[n])%>% mutate(InfDiff = KenyaData$Inflation[n+1]-KenyaData$Inflation[n])%>% mutate(GNIDiff = KenyaData$GNI[n+1]-KenyaData$GNI[n])%>% mutate(PropWDiff = KenyaData$PropW[n+1]-KenyaData$PropW[n])%>% mutate(TTDiff = KenyaData$TotalTrade[n+1]-KenyaData$TotalTrade[n]) %>% mutate(FDIDiff = KenyaData$FDI[n+1]-KenyaData$FDI[n])
+KenyaData
+
+USAData <- CountryData %>% 
+  filter(Country == "United States")
+USAData$n= seq(1,24,1)
+USAData=USAData %>% mutate(GiniDiff = USAData$Gini[n+1]-USAData$Gini[n])%>% mutate(InfDiff = USAData$Inflation[n+1]-USAData$Inflation[n])%>% mutate(GNIDiff = USAData$GNI[n+1]-USAData$GNI[n])%>% mutate(PropWDiff = USAData$PropW[n+1]-USAData$PropW[n])%>% mutate(TTDiff = USAData$TotalTrade[n+1]-USAData$TotalTrade[n]) %>% mutate(FDIDiff = USAData$FDI[n+1]-USAData$FDI[n])
+USAData
+
+CountryDataDiff= rbind(NorwayData,ChinaData,KenyaData,USAData)
+CountryDataDiff= CountryDataDiff %>% drop_na() %>% dplyr::select(Country, GiniDiff, InfDiff, GNIDiff, PropWDiff, TTDiff, FDIDiff)
+CountryDataDiff
+
+```
+
+  Subsequently, upon re-evaluating the variable with the Ljung-Box test, the p-value became statistically insignificant, leading us to fail to reject the null. By addressing the autocorrelation through differencing, we can now proceed with a greater amount of confidence in building a robust and reliable machine learning model. 
+  
+```{r}
+checkresiduals(CountryDataDiff$GiniDiff)
+```
+
+Next, we split the data into a training set and a test so that we have a way to gauge the predictive effectiveness of our model. Notably, to account for the differences in countries and the number of data-points we have available for each, we stratified the data, ensuring an equal proportion of random observations associated with each country are represented in our training and test sets.
+
+```{r}
+set.seed(100)
+train1 <- CountryDataDiff %>% group_by(Country) %>% sample_frac(size = 0.8)
+test1 <- CountryDataDiff %>% setdiff(train1)
+```
+
+### Linear Regression Model
+
+The first model we fit was a simple linear regression model using our differenced training data. We then optimized the model using the stepAIC() function. In order to test the predictive accuracy of our model, we calculated the mean squared error for the the test set and compared it to the mse of the training set.
+
+```{r}
+library(MASS)
+train1$Country <- as.factor(train1$Country)
+
+model1 <- lm(TTDiff ~ GiniDiff + InfDiff + PropWDiff + GNIDiff, data = train1)
+model_selected <- stepAIC(model1, direction = "both")
+
+summary(model1)
+summary(model_selected)
+
+test1
+TT_pred = predict(model_selected, newdata=test1)
+TT_pred
+```
+
+
+```{r}
+TT_pred_test = predict(model_selected, newdata=test1)
+sse_test <- sum((TT_pred_test - test1$TTDiff)^2)
+mse_test= sse_test/nrow(test1)
+mse_test
+
+
+TT_pred_train = predict(model_selected, newdata=train1)
+sse_train = sum((TT_pred_train - train1$TTDiff)^2)
+mse_train= sse_train/nrow(train1)
+mse_train
+```
+
+### Polynomial Regression Model
+
+The second model we fit was a polynomial regression model using our differenced training data. We then optimized the model using the stepAIC() function. In order to test the predictive accuracy of our model, we calculated the mean squared error for the the test set and compared it to the mse of the training set.
+
+```{r}
+model_poly <- lm(TTDiff ~ poly(GiniDiff, 2) + poly(InfDiff, 2) + poly(PropWDiff,2) + poly(GNIDiff, 2), data = train1)
+
+model_selected_poly <- stepAIC(model_poly, direction = "both")
+
+summary(model_selected_poly)
+TT_predpoly = predict(model_selected_poly, newdata=test1)
+```
+
+```{r}
+TT_predpoly = predict(model_selected_poly, newdata=test1)
+ssepoly_test <- sum((TT_predpoly - test1$TTDiff)^2)
+msepoly_test=ssepoly_test/nrow(test1)
+msepoly_test 
+
+TT_predpoly_train = predict(model_selected_poly, newdata=train1)
+ssepoly_train = sum((TT_predpoly_train - train1$TTDiff)^2)
+msepoly_train= ssepoly_train/nrow(train1)
+msepoly_train
+```
+
+#### Polynomial Graphs
+```{r}
+plot_graph <- function(data, var, title) {
+  model <- lm(TTDiff ~ poly(InfDiff, 2) + poly(PropWDiff, 2) + poly(GNIDiff, 2), data = data)
+  coefficients <- coef(model)
+
+  min_value <- min(data[[var]], na.rm = TRUE)
+  max_value <- max(data[[var]], na.rm = TRUE)
+  x <- seq(min_value, max_value, by = 0.1)
+  y <- coefficients[paste('poly(', var, ', 2)2', sep = '')] * x^2 + 
+      coefficients[paste('poly(', var, ', 2)1', sep = '')] * x - 
+      coefficients['(Intercept)']
+  data_plot <- data.frame(x, y)
+  ggplot(data_plot, aes(x, y)) + 
+    geom_line() + 
+    ggtitle(title) +
+    xlab(var) + 
+    ylab("y")
+}
+
+# Plot for InfDiff
+plot_graph(CountryDataDiff, "InfDiff", "Impact of InfDiff on TTDiff")
+
+# Plot for PropWDiff
+plot_graph(CountryDataDiff, "PropWDiff", "Impact of PropWDiff on TTDiff")
+
+# Plot for GNIDiff
+plot_graph(CountryDataDiff, "GNIDiff", "Impact of GNIDiff on TTDiff")
+```
+
+## Interpertation of Results
+
+  In order to compare the models, we first looked at the training mean squared error (mse) values. For the linear regression model, mse was approximately 10.17, and for the polynomial model it was approximately 4.93. Mse tells us the average squared difference between the predicted value of TTDiff and the actual value; thus it conveys how well the models fit the dataset that they were trained with. Because the polynomial model has a lower mse, it better fits the training data. However, with regard to the test set mse values, the linear model was lower at 29.45028 and while the polynomial model was higher at 63.10175. This disparity conveys that the linear model was a better predictor for the test set despite not fitting the training set as well as the polynomial model, indicating that the latter was overfit.
+  Looking inside the linear model, all of our predictors were significant at least at the ten percent level. GiniDiff, InfDiff, and GNIDiff had positive estimated coefficients of .7424, .6477, and .2923 respectively, while PropWDiff had an estimated coefficient of -.8477. This indicates that, among our selected countries, as Gini coefficients increase, Inflation growth accelerates and GNI per capita growth accelerates, trade as a percentage of GDP will also tend to increase. Conversely, as the proportion of women in national parliaments increases, trade as a percentage of GDP will tend to fall.
+  In our study, we employed a polynomial regression model to elucidate the relationships between several macroeconomic and social variables and their predictive power on the centrality of trade in an economy. Polynomial regression, an extension of linear regression, allows us to model the relationship between the independent variable(s) and the dependent variable as an nth degree polynomial. This approach is particularly useful in capturing the non-linear relationship often observed in economic data.
+  The polynomial model can be represented by the equation y=ax2+bx+c. y is the dependent variable (in our case, the centrality of trade), x represents the independent variable, a and b are coefficients for the second and first degree of the polynomial respectively, and c is the intercept. In this model, the coefficients are estimated using a least squares approach, optimizing the fit of the polynomial curve to the observed data.
+
+### Empirical Findings
+1. Impact of Inflation Differential (InfDiff) on Total Trade Differential (TTDiff):
+Graphical Analysis: The polynomial plot indicates a peak slightly above zero.
+Economic Interpretation: This aligns with conventional economic theory, where a positive inflation is beneficial for exporters but bad for importers because of favorable/unfavorable exchange rates. The opposite is true when the change in inflation is negative. Therefore, the “sweet spot” is zero, where neither importers or exporters are harmed.
+
+2. Impact of Gross National Income Differential (GNIDiff) on TTDiff:
+Graphical Analysis: The curve exhibits a maximum slightly above zero.
+Economic Interpretation: A modest year-over-year increase in GNI positively influences trade. However, an excessively rapid GNI growth can trigger inflation, speculative behaviors in financial markets, and resource constraints, ultimately impairing trade. This explains the tapering of the curve beyond a certain point.
+
+3. Impact of Proportion of Women Differential (PropWDiff) on TTDiff:
+Graphical Analysis: The curve suggests a negative impact of increasing PropW on trade.
+Economic Interpretation: We hypothesize this as a case of omitted variable bias. PropW might be acting as a proxy for a variable not included in our model, possibly reflecting a measure of equality. The data might indicate that countries with higher equality levels engage less in trade, though further investigation is required to confirm this hypothesis.
+
+## Post-Hoc Analysis
+
+### Removing Outliers
+  Since our MSE even in our best model, the linear model, was really high, we decided to further inquire as to why it is through looking at our residuals for specific points and see anomalous factors occurring. To summarize the residual graph above, we found that two data points had extremely high residuals when we plotted the residuals of our best model, Linear Regression. One of these points is from Kenya and has a residual difference close to 280. This difference is likely due to the fact that the data point is from a period between 2005 and 2015, which is a 10-year time gap. The other point is from China and has a residual difference of 150, which is due to a 4-year time gap. Our group believes that these data points should be considered outliers and excluded from the dataset due to the large time gaps in the data.
+  
+```{r}
+TT_train = predict(model_selected, newdata=train1)
+resid <- c(round((TT_pred - test1$TTDiff)^2,1), round((TT_train - train1$TTDiff)^2,1))
+plot(resid)
+```
+
+#### Effects on Models
+```{r}
+set.seed(100) 
+CountryDataDiff1 <- CountryDataDiff %>% filter(TTDiff>-20,TTDiff<18)
+train2 <- CountryDataDiff1 %>% group_by(Country) %>% sample_frac(size = 0.8)
+test2 <- CountryDataDiff1 %>% setdiff(train2)
+```
+```{r}
+train2$Country <- as.factor(train2$Country)
+
+model2 <- lm(TTDiff ~ GiniDiff + InfDiff + PropWDiff + GNIDiff + FDIDiff, data = train2)
+model_selected1 <- stepAIC(model2, direction = "both")
+
+summary(model2)
+summary(model_selected1)
+
+TT_pred1 = predict(model_selected1, newdata=test2)
+TT_pred1
+sse <- sum((TT_pred1 - test2$TTDiff)^2)
+sse
+
+TT_pred_test = predict(model_selected1, newdata=test2)
+sse_test <- sum((TT_pred_test - test2$TTDiff)^2)
+mse_test= sse_test/nrow(test2)
+mse_test
+
+
+TT_pred_train = predict(model_selected1, newdata=train2)
+sse_train = sum((TT_pred_train - train2$TTDiff)^2)
+mse_train= sse_train/nrow(train2)
+mse_train
+```
+
+  In comparing our linear model with and without the identified outliers, we observe notable improvements. The MSE values for both training (MSE = 5.46) and test (MSE = 14.34) are significantly lower with the exclusion of those data points, indicating a better fit to both datasets. It's important to acknowledge that while the model still exhibits overfitting to the training data, the extent of overfitting has been reduced.
+  Examining the updated linear model, we identify significant predictors below the alpha level of 0.1, namely GNIDiff, InfDiff, FDIDiff, and GiniDiff, with positive coefficients of 0.2838, 0.6940, 0.3754, and 0.5065, respectively. This contrasts with the original model, which included PropWDiff as a significant variable in predicting TTDiff but excluded FDIDiff due to stepAIC.
+The implications of this updated model suggest that, among the countries analyzed, whenever there is growth in the Gini coefficient, Inflation rate, Foreign Direct Investment, or Gross National Income per capita, Trade as a percentage of GDP will also increase. 
+
+### PCA Analysis
+  In our supervised learning models, we did not specifically examine whether each country was distinct from each other. Instead,  we attempted to take into account our models by stratifying our test and training dataset. To thoroughly explore our dataset, our group decided to spur this minor question using Principal Component Analysis.
+
+```{r Warning = FALSE}
+library(factoextra)
+library(cluster)
+
+variablesdiff <- CountryDataDiff %>% dplyr::select(-Country)
+pca_resultdiff <- prcomp(variablesdiff, scale = TRUE)
+t(pca_resultdiff$rotation)
+summary(pca_resultdiff)
+```
+
+```{r}
+pca_resultdiff$x %>% as_tibble() %>% bind_cols(CountryDataDiff) %>% 
+  ggplot(aes(x = PC1, y = PC2, color = Country)) + 
+  geom_point()
+```
+
+  Reviewing the tables outputted by the PCA, it is evident that the first three principal components account for 75% of the variance in the data. Additionally from the proportion of variance row, we can highlight the elbow being at PC1 due to the sharp change in slope. As for looking at the linear combination of the principal components, i.e. rotations of the cartesian plane, we see a notable negative loading in GiniDiff, InfDiff, GNIDiff and TTDiff while strong positive loading for PropWDiff, which match the supervised linear regression performed when the outliers were included. 
+Now turning our attention to the graphical output, the first thing to note is that all countries appear to cluster around the origin (0,0), with Norway and Kenya being more dispersed over the graph when compared to China and the US. These observations draw the conclusion that no country is unique when looking at the changes of variables i.e. growth. This makes sense as if countries opt for similar economic decisions, their growths would be in similar or same direction. The issue is that countries do not make the same decisions, so when looking at the non-differenced data we should see unique clusters. 
+
+```{r}
+variables <- CountryData %>% dplyr::select(-Country,-TradeGrowth,-Year)
+pca_result <- prcomp(variables, scale = TRUE)
+t(pca_result$rotation)
+summary(pca_result)
+```
+
+```{r}
+pca_result$x %>% as_tibble() %>% bind_cols(CountryData) %>% 
+  ggplot(aes(x = PC1, y = PC2, color = Country)) + 
+  geom_point()
+```
+
+  As mentioned before, there are definitely 3 unique clusters of Norway, China and the US. Kenya can be debated in terms of it being its own cluster; however, if there were more data points, it would probably have its own cluster. This graphical output reveals that countries do not come to the same economic decisions, hence it being a unique cluster. 
+  In addition, there should not be an issue with correlation as it PCA converts any data into uncorrelated principle components due to the analysis applying orthonormality onto the data set. 
+
+***
+
+# Conclusion
+
+  After assessing our data through exploratory modeling as well as more advanced machine learning techniques we have come to two solid conclusions. The first revolves around the relationship between the predictors of PropW, GNI, Gini index, and Inflation in correspondence to Total Trade. When not removing outliers, we find that the  proportion of women in national parliaments is the strongest predictor of total trade. However, when removed, as seen in the Effects on Modeling section, we find GNI per capita to be the strongest predictor instead. The second conclusion we come to is in regards to our PCA analysis. Through this modeling, we found that our non-differenced data had clear clustering, yet the differenced data has did not. This indicates that if countries made the same decisions, they would have the same amount of total trade as one another. Our research lays a foundation for further exploration into the relationships between trade and macroeconomic and social variables. The findings, though our models, contribute to the ongoing discourse in global economic research and provide valuable insights for future empirical research in economics and data science.
+
+## Limitations
+
+  In the course of our research, we encountered several notable limitations that warrant discussion. A primary constraint was the incomplete nature of our dataset, exemplified by the inconsistent reporting of the Proportion of Women in Parliament (PropW) in earlier years, which posed challenges for conducting a complete historical analysis. This gap in the data may have potentially introduced biases and limits the generalizability of our findings. Furthermore, our team's lack of prior experience with time series analysis presented a significant hurdle. As this was a crucial aspect of our study, the learning curve we faced may have affected the depth and rigor of our analysis, potentially impacting the robustness of our results. Another critical issue was the necessity to potentially overfit our models due to the limited availability of training data. This can lead to models that perform well on the training data but fail to generalize effectively to unseen data, thereby limiting the predictive power of our findings. Each of these limitations underscores the need for a cautious interpretation of our results and provides a valuable roadmap for future research endeavors.
+
+## Suggestions for Future Research
+
+  When thinking about the future direction of the project, we propose several key directions aimed at refining our methodology. Firstly, the incorporation of ARIMA (Autoregressive Integrated Moving Average) would be beneficial. This approach would optimize the autocorrelation in time series data, thereby enhancing the accuracy of our forecasts. This is better than simply differencing the data like we did. However, it is crucial to acknowledge that interpreting ARIMA models requires a sophisticated understanding of their mechanics, especially as the data must be reverse-transformed for meaningful interpretation.
+  Another future direction that could be pursued is classifier-based machine learning techniques. We would do this to deepen our understanding of the dataset by identifying and categorizing key economic indicators. The challenge here lies in our current limited economic expertise, particularly in determining appropriate categorizations for the data points.
+  Lastly, addressing data quality and quantity issues is important. We aim to find datasets with minimal missing values (NAs) to ensure the reliability of our analysis. Additionally, expanding the size of our dataset, with more variables, is crucial to reduce the risk of overfitting, thereby enhancing the generalizability of our model. 
+  By pursuing these future directions, we anticipate a significant improvement in our ability to model and understand the intricate dynamics between trade and various economic and social factors.
+
+
+***
+
+# References
+World Bank Open Data. (n.d.). https://data.worldbank.org/ 
+
+
+
+
+
+
+
